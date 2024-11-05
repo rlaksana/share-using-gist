@@ -2,8 +2,8 @@ name: Create Release
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    branches:
+        - master
 
 jobs:
   release:
@@ -24,18 +24,18 @@ jobs:
     - name: Build the plugin
       run: npm run build
 
+    - name: Extract version from manifest.json
+      id: get_version
+      run: |
+        version=$(jq -r '.version' manifest.json)
+        echo "Version found: $version"
+        echo "##[set-output name=version;]$version"
+
     - name: Create GitHub Release
       id: create_release
       uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
-        body: |
-          Description of the release.
-        draft: false
-        prerelease: false
 
     - name: Upload Release Assets
       uses: actions/upload-release-asset@v1
