@@ -61,7 +61,7 @@ export default class QuickShareNotePlugin extends Plugin {
 						content: contentToPublish,
 					},
 				},
-				public: true,
+				public: false, // Set to false for secret gist
 			}),
 		});
 

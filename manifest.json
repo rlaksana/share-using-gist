@@ -1,7 +1,7 @@
 {
 	"id": "share-note-img-with-gist",
 	"name": "Quick Share Note to Gist",
-	"version": "1.0.9",
+	"version": "1.0.10",
 	"minAppVersion": "0.15.0",
 	"description": "Quick publish and share notes to GitHub Gist and its image by upload images to Imgur.",
 	"author": "Por Chainarong Tangsurakit",
