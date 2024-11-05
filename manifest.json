@@ -1,11 +1,10 @@
 {
 	"id": "share-note-img-with-gist",
 	"name": "Quick Share Note to Gist",
-	"version": "1.0.6",
+	"version": "1.0.7",
 	"minAppVersion": "0.15.0",
 	"description": "Quick publish and share Obsidian notes to GitHub Gist and its image by upload images to Imgur.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"author": "Por Chainarong Tangsurakit",
+	"authorUrl": "https://github.com/chaintng",
 	"isDesktopOnly": false
 }
