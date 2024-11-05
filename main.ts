@@ -155,7 +155,7 @@ class QuickShareNoteSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		containerEl.createEl('h2', { text: 'QuickShareNote Plugin Settings' });
+		containerEl.createEl('h2', { text: 'Quick Share Note to Gist Plugin Settings' });
 
 		new Setting(containerEl)
 			.setName('GitHub Token')
