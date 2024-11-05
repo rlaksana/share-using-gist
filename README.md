@@ -1,4 +1,4 @@
-# Quick Share Note to Gist (Obsidian Plugin)
+# Quick Share Note to Gist (Plugin)
 
 Quick Share Note to Gist is an Obsidian plugin that allows you to quickly publish your notes to GitHub Gist and upload images to Imgur.
 
