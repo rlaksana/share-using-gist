@@ -4,6 +4,7 @@
 
 ## DEMO
 ![Demo of Plugin](./docs/DEMO.gif)
+[Link to demo gist file](https://gist.github.com/chaintng/e20f278cbf03d855bd51c5840caf728f)
 
 ## Installation
 
