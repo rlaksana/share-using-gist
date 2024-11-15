@@ -3,8 +3,8 @@
 **Quick Share Note to gist** is an Obsidian plugin. ✨ It quickly publish your notes to GitHub gist (SECRET, but shareable) 🚀 and also UPLOAD IMAGES to ImgUr! 🌈
 
 ## DEMO
-![Demo of Plugin](./docs/DEMO.gif)
 [Link to demo gist file](https://gist.github.com/chaintng/e20f278cbf03d855bd51c5840caf728f)
+![Demo of Plugin](./docs/DEMO.gif)
 
 ## Installation
 
