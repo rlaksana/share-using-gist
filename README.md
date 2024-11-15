@@ -1,6 +1,6 @@
-# Quick Share Note to Gist (Plugin)
+# Quick Share Note to gist (Plugin)
 
-**Quick Share Note to Gist** is an Obsidian plugin. ✨ It quickly publish your notes to GitHub Gist (SECRET, but shareable) 🚀 and also UPLOAD IMAGES to ImgUr! 🌈
+**Quick Share Note to gist** is an Obsidian plugin. ✨ It quickly publish your notes to GitHub gist (SECRET, but shareable) 🚀 and also UPLOAD IMAGES to ImgUr! 🌈
 
 ## DEMO
 ![Demo of Plugin](./docs/DEMO.gif)
@@ -21,13 +21,13 @@ After enabling the plugin, go to the plugin settings to configure the following 
 ## Usage
 
 1. Open the note you want to publish in Obsidian.
-2. Use the command palette (`Ctrl+P` or `Cmd+P`) and select `Publish Note to GitHub Gist`.
-3. The plugin will upload the note and any images to GitHub Gist and Imgur, respectively.
-4. A notification will appear with the Gist URL, which will also be copied to your clipboard.
+2. Use the command palette (`Ctrl+P` or `Cmd+P`) and select `Publish note to GitHub gist`.
+3. The plugin will upload the note and any images to GitHub gist and Imgur, respectively.
+4. A notification will appear with the gist URL, which will also be copied to your clipboard.
 
 ## Features
 
-- Publish notes to GitHub Gist.
+- Publish notes to GitHub gist.
 - Upload images to Imgur and replace links in the gist note.
 - Option to include or exclude frontmatter in the published note.
 - Copy gist URL into clipboard, and paste in frontmatter field of ur note.

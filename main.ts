@@ -21,7 +21,7 @@ export default class QuickShareNotePlugin extends Plugin {
 
 		this.addCommand({
 			id: 'publish-note-to-gist',
-			name: 'Publish Note to GitHub Gist',
+			name: 'Publish note to GitHub gist',
 			callback: () => this.publishNoteToGist(),
 		});
 	}
@@ -33,7 +33,7 @@ export default class QuickShareNotePlugin extends Plugin {
 			return;
 		}
 
-		const notice = new Notice(`Uploading Notes and Images: ${activeFile.name}...`, 0); // Include file name
+		const notice = new Notice(`Uploading notes and images: ${activeFile.name}...`, 0); // Include file name
 		let fileContent = await this.app.vault.read(activeFile);
 		let updatedContent = await this.uploadImagesAndReplaceLinks(fileContent);
 
@@ -69,7 +69,7 @@ export default class QuickShareNotePlugin extends Plugin {
 		this.copyLinkToClipboard(gistUrl);
 		await this.updateFrontmatter(activeFile, gistUrl);
 		notice.hide();
-		new Notice('Note published to GitHub Gist');
+		new Notice('Note published to GitHub gist');
 	}
 
 	async addHeaderToContent(file: TFile) {
@@ -104,8 +104,12 @@ export default class QuickShareNotePlugin extends Plugin {
 		const notePath = activeFile ? activeFile.path.replace(/[^/]+$/, '') : '';
 		let match;
 		while ((match = imageRegex.exec(content)) !== null) {
-			const imagePath = `${notePath}/attachments/${match[1]}`;
-			const imageData = await this.app.vault.adapter.readBinary(imagePath);
+			// const imagePath = `${notePath}/attachments/${match[1]}`;
+			const attachFile = this.app.metadataCache.getFirstLinkpathDest(match[1], notePath);
+			if (attachFile == null) {
+				continue;
+			}
+			const imageData = await this.app.vault.adapter.readBinary(attachFile.path);
 			const imageUrl = await this.uploadImageToImgur(imageData);
 			content = content.replace(match[0], `![Uploaded Image](${imageUrl})`);
 		}
@@ -127,9 +131,9 @@ export default class QuickShareNotePlugin extends Plugin {
 
 	copyLinkToClipboard(link: string) {
 		navigator.clipboard.writeText(link).then(() => {
-			new Notice('Gist URL copied to clipboard');
+			new Notice('gist URL copied to clipboard');
 		}, (err) => {
-			new Notice('Failed to copy Gist URL to clipboard');
+			new Notice('Failed to copy gist URL to clipboard');
 		});
 	}
 
@@ -155,10 +159,8 @@ class QuickShareNoteSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		containerEl.createEl('h2', { text: 'Quick Share Note to Gist Plugin Settings' });
-
 		new Setting(containerEl)
-			.setName('GitHub Token')
+			.setName('GitHub token')
 			.setDesc('Enter your GitHub token')
 			.addText(text => text
 				.setPlaceholder('Enter your token')
@@ -169,7 +171,7 @@ class QuickShareNoteSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Imgur Client ID')
+			.setName('Imgur client ID')
 			.setDesc('Enter your Imgur client ID')
 			.addText(text => text
 				.setPlaceholder('Enter your client ID')
@@ -180,7 +182,7 @@ class QuickShareNoteSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl) // Add this block
-			.setName('Show Frontmatter')
+			.setName('Show frontmatter')
 			.setDesc('Show frontmatter in published note')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.showFrontmatter)
