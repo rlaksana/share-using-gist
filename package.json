@@ -1,6 +1,6 @@
 {
 	"name": "quick-share-note-to-gist",
-	"version": "1.0.15",
+	"version": "1.0.16",
 	"description": "Quick share notes to GitHub gist and its image by upload images to Imgur (https://github.com/chaintng/quick-share-note-to-gist)",
 	"main": "main.js",
 	"scripts": {

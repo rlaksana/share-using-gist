@@ -37,6 +37,8 @@ export default class QuickShareNotePlugin extends Plugin {
 		let fileContent = await this.app.vault.read(activeFile);
 		let updatedContent = await this.uploadImagesAndReplaceLinks(fileContent);
 
+		const gistIdMatch = updatedContent.match(/gistPublishUrl: https.*\/(.*)/);
+
 		if (!this.settings.showFrontmatter) {
 			updatedContent = updatedContent.replace(/^---\n[\s\S]*?\n---\n/, ''); // Remove frontmatter if setting is false
 		}
@@ -48,7 +50,20 @@ export default class QuickShareNotePlugin extends Plugin {
 		const header = `# ${fileNameWithoutSuffix}\n\n`;
 		const contentToPublish = frontmatter + header + contentWithoutFrontmatter;
 
-		const response = await requestUrl({
+		const response = (gistIdMatch) ? 
+			await this.updateGist(gistIdMatch[1], activeFile.name, contentToPublish) 
+			: await this.createNewGist(activeFile.name, contentToPublish);
+
+		const gistUrl = response.json.html_url;
+		this.copyLinkToClipboard(gistUrl);
+		await this.updateFrontmatter(activeFile, gistUrl);
+		notice.hide();
+		new Notice('Note published to GitHub gist');
+	}
+
+
+	async createNewGist(activeFileName: string, contentToPublish: string) {
+		return await requestUrl({
 			url: 'https://api.github.com/gists',
 			method: 'POST',
 			headers: {
@@ -57,19 +72,31 @@ export default class QuickShareNotePlugin extends Plugin {
 			},
 			body: JSON.stringify({
 				files: {
-					[activeFile.name]: {
+					[activeFileName]: {
 						content: contentToPublish,
 					},
 				},
 				public: false, // Set to false for secret gist
 			}),
 		});
+	}
 
-		const gistUrl = response.json.html_url;
-		this.copyLinkToClipboard(gistUrl);
-		await this.updateFrontmatter(activeFile, gistUrl);
-		notice.hide();
-		new Notice('Note published to GitHub gist');
+	async updateGist(gistId: string, activeFileName: string, contentToPublish: string) {
+		return await requestUrl({
+			url: `https://api.github.com/gists/${gistId}`,
+			method: 'PATCH',
+			headers: {
+				Authorization: `token ${this.settings.githubToken}`,
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({
+				files: {
+					[activeFileName]: {
+						content: contentToPublish,
+					},
+				},
+			}),
+		});
 	}
 
 	async addHeaderToContent(file: TFile) {
@@ -87,12 +114,12 @@ export default class QuickShareNotePlugin extends Plugin {
 
 		if (match) {
 			const frontmatter = match[1];
-			const updatedFrontmatter = frontmatter.includes('publishUrl')
-				? frontmatter.replace(/publishUrl: .*/, `publishUrl: ${url}`)
-				: `${frontmatter}\npublishUrl: ${url}`;
+			const updatedFrontmatter = frontmatter.includes('gistPublishUrl')
+				? frontmatter.replace(/gistPublishUrl: .*/, `gistPublishUrl: ${url}`)
+				: `${frontmatter}\ngistPublishUrl: ${url}`;
 			newContent = fileContent.replace(frontmatterRegex, `---\n${updatedFrontmatter}\n---`);
 		} else {
-			newContent = `---\npublishUrl: ${url}\n---\n${fileContent}`;
+			newContent = `---\ngistPublishUrl: ${url}\n---\n${fileContent}`;
 		}
 
 		await this.app.vault.modify(file, newContent);
@@ -104,7 +131,6 @@ export default class QuickShareNotePlugin extends Plugin {
 		const notePath = activeFile ? activeFile.path.replace(/[^/]+$/, '') : '';
 		let match;
 		while ((match = imageRegex.exec(content)) !== null) {
-			// const imagePath = `${notePath}/attachments/${match[1]}`;
 			const attachFile = this.app.metadataCache.getFirstLinkpathDest(match[1], notePath);
 			if (attachFile == null) {
 				continue;
