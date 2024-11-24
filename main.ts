@@ -37,7 +37,7 @@ export default class QuickShareNotePlugin extends Plugin {
 		let fileContent = await this.app.vault.read(activeFile);
 		let updatedContent = await this.uploadImagesAndReplaceLinks(fileContent);
 
-		const gistIdMatch = updatedContent.match(/gistPublishUrl: https.*\/(.*)/);
+		const gistIdMatch = updatedContent.match(/gist-publish-url: https.*\/(.*)/);
 
 		if (!this.settings.showFrontmatter) {
 			updatedContent = updatedContent.replace(/^---\n[\s\S]*?\n---\n/, ''); // Remove frontmatter if setting is false
@@ -114,12 +114,12 @@ export default class QuickShareNotePlugin extends Plugin {
 
 		if (match) {
 			const frontmatter = match[1];
-			const updatedFrontmatter = frontmatter.includes('gistPublishUrl')
-				? frontmatter.replace(/gistPublishUrl: .*/, `gistPublishUrl: ${url}`)
-				: `${frontmatter}\ngistPublishUrl: ${url}`;
+			const updatedFrontmatter = frontmatter.includes('gist-publish-url')
+				? frontmatter.replace(/gist-publish-url: .*/, `gist-publish-url: ${url}`)
+				: `${frontmatter}\ngist-publish-url: ${url}`;
 			newContent = fileContent.replace(frontmatterRegex, `---\n${updatedFrontmatter}\n---`);
 		} else {
-			newContent = `---\ngistPublishUrl: ${url}\n---\n${fileContent}`;
+			newContent = `---\ngist-publish-url: ${url}\n---\n${fileContent}`;
 		}
 
 		await this.app.vault.modify(file, newContent);
