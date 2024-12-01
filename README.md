@@ -7,9 +7,8 @@
 ![Demo of Plugin](./docs/DEMO.gif)
 
 ## Installation
-
-1. Download the plugin files and place them in your Obsidian plugins folder.
-2. Enable the plugin in Obsidian settings.
+- Search "Quick Share Note to gist" in Obsidian's Plug-in marketplace
+- OR go to this link: https://obsidian.md/plugins?id=quick-share-note-to-gist
 
 ## Configuration
 
