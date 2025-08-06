@@ -1,16 +1,38 @@
 {
-	"name": "quick-share-note-to-gist",
-	"version": "1.0.18",
-	"description": "Quick share notes to GitHub gist and its image by upload images to Imgur (https://github.com/chaintng/quick-share-note-to-gist)",
+	"name": "share-using-gist",
+	"version": "2.0.0",
+	"description": "Enhanced Obsidian plugin for sharing notes to GitHub Gist with multi-variant Markdown compatibility, intelligent content conversion, and advanced image handling",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-		"version": "node version-bump.mjs && git add manifest.json versions.json"
+		"version": "node version-bump.mjs && git add manifest.json versions.json",
+		"typecheck": "tsc -noEmit -skipLibCheck",
+		"validate": "jq empty manifest.json && jq empty package.json && jq empty versions.json"
 	},
-	"keywords": [],
-	"author": "",
+	"keywords": [
+		"obsidian",
+		"plugin",
+		"github",
+		"gist",
+		"markdown",
+		"sharing",
+		"imgur",
+		"compatibility",
+		"wikilinks",
+		"callouts",
+		"multi-variant"
+	],
+	"author": "Enhanced by AI Assistant",
 	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/your-username/share-using-gist.git"
+	},
+	"homepage": "https://github.com/your-username/share-using-gist#readme",
+	"bugs": {
+		"url": "https://github.com/your-username/share-using-gist/issues"
+	},
 	"devDependencies": {
 		"@types/node": "^16.11.6",
 		"@typescript-eslint/eslint-plugin": "5.29.0",

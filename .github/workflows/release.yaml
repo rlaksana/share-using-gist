@@ -1,4 +1,4 @@
-name: Create Release
+name: Share Using Gist Release
 permissions: 
   contents: write
 
@@ -7,6 +7,11 @@ on:
     branches:
       - main
       - master
+    paths:
+      - 'manifest.json'
+      - 'package.json' 
+      - 'main.ts'
+      - 'versions.json'
 
 jobs:
   release:
@@ -88,9 +93,33 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ env.manifest_version }}
-          release_name: Release ${{ env.manifest_version }}
+          release_name: Share Using Gist v${{ env.manifest_version }}
           draft: false
           prerelease: false
+          body: |
+            ## 🚀 Share Using Gist v${{ env.manifest_version }}
+            
+            Enhanced Obsidian plugin for intelligent GitHub Gist sharing with multi-variant Markdown compatibility.
+            
+            ### ✨ Key Features
+            - Multi-variant Markdown compatibility system
+            - Intelligent content conversion (wikilinks, callouts, tags)
+            - Advanced image handling with progress tracking
+            - Comprehensive error handling and validation
+            - Real-time compatibility analysis
+            
+            ### 📥 Installation
+            1. Download `main.js` and `manifest.json`
+            2. Create folder `{VaultFolder}/.obsidian/plugins/share-using-gist/`
+            3. Place files in the folder and restart Obsidian
+            4. Enable "Share Using Gist" in Community Plugins settings
+            
+            ### ⚙️ Setup
+            - Configure GitHub token with `gist` scope
+            - Add Imgur client ID for image uploads
+            - Customize compatibility conversion preferences
+            
+            Made with ❤️ for the Obsidian community
 
       - name: Upload Release Assets
         uses: actions/upload-release-asset@v1
@@ -110,4 +139,14 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./manifest.json
           asset_name: manifest.json
+          asset_content_type: application/json
+          
+      - name: Upload versions.json
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./versions.json
+          asset_name: versions.json
           asset_content_type: application/json
