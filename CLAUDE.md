@@ -4,78 +4,211 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is "Share Using Gist", an enhanced Obsidian plugin that intelligently publishes notes to GitHub Gist with advanced multi-variant Markdown compatibility features, intelligent content conversion, and robust image handling. The plugin is written in TypeScript and targets Obsidian's plugin API with comprehensive error handling and type safety.
+**Share Using Gist** (v2.0.0) is a professionally rebranded and enhanced Obsidian plugin that intelligently publishes notes to GitHub Gist with advanced multi-variant Markdown compatibility features. The plugin transforms from a simple fork into a comprehensive solution for sharing Obsidian content with intelligent conversion, robust error handling, and professional development workflow.
+
+### Key Identity
+- **Project Name**: share-using-gist
+- **Display Name**: Share Using Gist  
+- **Version**: 2.0.0+ (fresh start from rebranding)
+- **Author**: Enhanced by AI Assistant
+- **Repository**: https://github.com/rlaksana/share-using-gist
 
 ## Build Commands
 
 - `npm run dev` - Development build with file watching
-- `npm run build` - Production build (includes TypeScript type checking)
-- `npm run version` - Updates version in manifest.json and versions.json, then stages files for git commit
+- `npm run build` - Production build with TypeScript type checking and validation
+- `npm run typecheck` - TypeScript validation only
+- `npm run validate` - JSON file validation (requires Python fallback on Windows)
+- `npm run version` - Updates version across manifest.json, package.json, and versions.json
 
-## Architecture
+## Enhanced Architecture
 
-The plugin follows Obsidian's standard plugin architecture:
+### Core Plugin Components
 
-### Core Components
+- **main.ts**: Comprehensive TypeScript implementation
+  - `QuickShareNotePlugin`: Main plugin class with enhanced error handling
+  - `MarkdownCompatibilityHandler`: Advanced multi-variant Markdown processing
+  - `QuickShareNoteSettingTab`: Enhanced settings UI with validation
+  - Enhanced interfaces with comprehensive TypeScript typing
 
-- **main.ts**: Single-file plugin containing all functionality
-  - `QuickShareNotePlugin`: Main plugin class extending Obsidian's Plugin base class
-  - `QuickShareNoteSettingTab`: Settings UI for configuring GitHub token, Imgur client ID, and frontmatter display
-  - Settings interface: `QuickShareNotePluginSettings` with GitHub token, Imgur client ID, and frontmatter toggle
+### Advanced Features
 
-### Key Functionality
+#### Multi-Variant Markdown Compatibility System
+- **MarkdownCompatibilityHandler class**: Intelligent content analysis and conversion
+- **Variant Detection**: Automatic identification of Obsidian-specific elements
+- **Conversion Pipeline**: Layered approach to content transformation
+- **Compatibility Scoring**: 0-100 compatibility assessment
+- **Real-time Analysis**: Preview conversions before publishing
 
-- **publishNoteToGist()**: Core method that orchestrates the publishing process with multi-variant Markdown compatibility
-- **MarkdownCompatibilityHandler**: Handles conversion of Obsidian-specific Markdown to GitHub Gist compatible format
-- **uploadImagesAndReplaceLinks()**: Processes Obsidian image attachments and uploads to Imgur
-- **createNewGist()/updateGist()**: GitHub API integration for gist creation/updates
-- **updateFrontmatter()**: Adds gist URL to note frontmatter for tracking published gists
-- **analyzeCurrentNoteCompatibility()**: Analyzes current note for Markdown compatibility issues
+#### Enhanced Publishing Pipeline
+- **prepareContentForPublishing()**: Integrated compatibility conversion
+- **publishToGist()**: Robust publishing with progress tracking
+- **finalizePublishing()**: Post-publish workflow with validation
+- **analyzeCurrentNoteCompatibility()**: Standalone analysis tool
 
-### Build System
+#### Advanced Image Processing
+- **Progress Tracking**: Real-time upload status for multiple images
+- **Error Recovery**: Graceful fallback for failed uploads
+- **Format Conversion**: Intelligent Obsidian → Standard Markdown transformation
 
-- Uses esbuild for bundling (esbuild.config.mjs)
-- Targets CommonJS format for Obsidian compatibility
-- Excludes Obsidian API and CodeMirror modules (handled by Obsidian)
-- Development builds include inline source maps
-- Production builds are minified
+#### Professional Error Handling
+- **Comprehensive validation**: Settings, tokens, API responses
+- **User-friendly messages**: Context-specific error reporting
+- **Progress indicators**: Real-time status updates
+- **Fallback mechanisms**: Graceful degradation
 
-### Version Management
+### Git Workflow Integration
 
-- Automatic version synchronization between package.json, manifest.json, and versions.json
-- Uses npm version hooks to update all version files consistently
+#### Professional Git Hooks
+- **pre-commit**: Quality assurance, JSON validation, version consistency
+- **pre-push**: Release synchronization, build validation
+- **post-commit**: Success feedback, development guidance
 
-## File Structure
-
-- `main.ts` - Single TypeScript source file containing entire plugin
-- `manifest.json` - Obsidian plugin manifest
-- `package.json` - Node.js dependencies and scripts
-- `esbuild.config.mjs` - Build configuration
-- `version-bump.mjs` - Version synchronization script
-- `versions.json` - Obsidian plugin version compatibility tracking
-
-## Development Notes
-
-- Plugin uses Obsidian's requestUrl API for HTTP requests (no external HTTP libraries)
-- Images are processed using Obsidian's vault API to read binary attachment data
-- Frontmatter manipulation uses robust line-by-line parsing instead of regex
-- Settings are persisted using Obsidian's plugin data storage
-- Multi-variant Markdown compatibility system handles conversion of Obsidian-specific elements to GitHub Gist compatible format
+#### GitHub Actions Workflow
+- **Enhanced release automation**: Professional release notes
+- **Asset management**: Automated upload of main.js, manifest.json, versions.json
+- **Path-based triggers**: Efficient workflow execution
 
 ## Multi-Variant Markdown Compatibility
 
-The plugin includes a comprehensive system for handling different Markdown variants:
+### Intelligent Conversion System
 
-### Supported Conversions
-- **Wikilinks**: `[[Internal Link]]` → `**Internal Link**` or removed
-- **Tags**: `#tag` → `\`tag\`` or removed  
-- **Callouts**: `> [!note] Title` → `> 📝 **Title**` with emoji indicators
-- **Math Expressions**: `$$equation$$` → code blocks or removed
-- **Plugin Content**: Mermaid, Dataview, Admonitions → labeled code blocks or removed
-- **Comments**: `%%comment%%` → always removed
+#### Supported Element Types
+1. **Wikilinks**: `[[Internal Link]]`
+   - Permissive: `**Internal Link**` (preserved meaning)
+   - Strict: `Internal Link` (clean text)
+
+2. **Tags**: `#tag`
+   - Permissive: `` `tag` `` (readable inline code)
+   - Strict: Removed entirely
+
+3. **Callouts**: `> [!note] Title`
+   - Both modes: `> 📝 **Title**` (emoji indicators)
+   - Supports all Obsidian callout types
+
+4. **Math Expressions**: `$$equation$$`
+   - Convert: Code blocks with math syntax highlighting
+   - Preserve: Keep as-is (may not render)
+   - Remove: Strip entirely
+
+5. **Plugin Content**: Mermaid, Dataview, Admonitions
+   - Convert: Labeled code blocks with descriptions
+   - Remove: Clean removal
+
+6. **Comments**: `%%comment%%`
+   - Always removed (not meant for publishing)
 
 ### Configuration Options
-- **Compatibility Mode**: Strict (remove incompatible) vs Permissive (convert when possible)
-- **Individual Toggles**: Granular control over each conversion type
-- **Compatibility Reports**: Optional notifications about applied conversions
-- **Analysis Tool**: Command to analyze current note compatibility without publishing
+
+#### Compatibility Modes
+- **Strict Mode**: Remove all incompatible elements for maximum compatibility
+- **Permissive Mode**: Intelligent conversion preserving meaning when possible
+
+#### Granular Controls
+- Individual toggles for each element type
+- Math expression handling options
+- Plugin content processing preferences
+- Compatibility report settings
+
+#### Analysis Tools
+- **Compatibility scoring**: Percentage-based assessment
+- **Element detection**: Comprehensive variant identification
+- **Conversion preview**: See changes before publishing
+- **Recommendation system**: Automated improvement suggestions
+
+## File Structure & Architecture
+
+### Core Files
+- `main.ts` - Complete plugin implementation with all enhancements
+- `manifest.json` - Obsidian plugin manifest with v2.0.0 identity
+- `package.json` - Enhanced metadata with comprehensive keywords
+- `README.md` - Professional documentation with feature highlights
+- `LICENSE` - Updated copyright for new identity
+- `versions.json` - Obsidian compatibility tracking
+- `CLAUDE.md` - This comprehensive development guide
+
+### Build & Configuration
+- `esbuild.config.mjs` - Optimized build configuration
+- `version-bump.mjs` - Multi-file version synchronization
+- `.github/workflows/release.yaml` - Enhanced release automation
+
+### Git Hooks (Professional Workflow)
+- `.git/hooks/pre-commit` - Quality assurance and validation
+- `.git/hooks/pre-push` - Release synchronization and build verification
+- `.git/hooks/post-commit` - Success feedback and guidance
+
+## Development Workflow
+
+### Quality Assurance
+- **TypeScript**: Full type safety throughout codebase
+- **Build Validation**: Automated compilation checks
+- **JSON Validation**: Configuration file integrity
+- **Version Consistency**: Cross-file version synchronization
+
+### Professional Standards
+- **Error Handling**: Never fail silently, provide context
+- **Progress Feedback**: Keep users informed of long operations
+- **Input Validation**: Validate tokens, settings, user input
+- **Graceful Degradation**: Handle failures elegantly
+
+### Release Management
+- **Automated versioning**: Git hooks manage version consistency
+- **Release synchronization**: Auto-sync with latest GitHub releases
+- **Asset management**: Automated build and upload of release artifacts
+- **Professional documentation**: Enhanced release notes
+
+## Development Notes
+
+### Technical Implementation
+- **API Integration**: Obsidian requestUrl API for HTTP requests
+- **Image Processing**: Obsidian vault API for binary data handling
+- **Frontmatter Processing**: Robust line-by-line parsing (no regex dependencies)
+- **Settings Persistence**: Obsidian plugin data storage
+- **Cross-platform**: Windows/macOS/Linux compatible with Python fallbacks
+
+### Code Organization
+- **Modular Design**: Separate concerns with dedicated classes
+- **Type Safety**: Comprehensive TypeScript interfaces
+- **Error Boundaries**: Isolated error handling for each major operation
+- **Performance**: Efficient processing with progress tracking
+
+### User Experience
+- **Progressive Enhancement**: Features work independently
+- **Clear Feedback**: Real-time status and error messages
+- **Flexible Configuration**: Granular control over behavior
+- **Professional Polish**: Consistent branding and messaging
+
+## Commands Available
+
+### Plugin Commands (Obsidian)
+- **"Publish note to GitHub gist"**: Enhanced publishing with compatibility conversion
+- **"Analyze Markdown compatibility"**: Standalone analysis without publishing
+
+### Development Commands (CLI)
+- **npm run dev**: Development server with hot reload
+- **npm run build**: Production build with full validation
+- **npm run typecheck**: TypeScript validation
+- **npm run validate**: JSON configuration validation
+
+## Version 2.0.0 Enhancements
+
+This represents a complete transformation from the original fork:
+
+### Professional Identity
+- Complete rebranding with clean repository identity
+- Enhanced metadata and documentation
+- Professional Git workflow with automated quality assurance
+
+### Advanced Features
+- Multi-variant Markdown compatibility system
+- Intelligent content conversion with user control
+- Advanced error handling and user feedback
+- Comprehensive settings with validation
+
+### Development Excellence
+- Full TypeScript implementation with type safety
+- Professional Git hooks for quality assurance
+- Enhanced GitHub Actions for automated releases
+- Comprehensive documentation and user guides
+
+This plugin now stands as a professional, feature-rich solution for sharing Obsidian content to GitHub Gist with intelligent compatibility handling.
