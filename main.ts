@@ -520,6 +520,7 @@ class MarkdownCompatibilityHandler {
 export default class QuickShareNotePlugin extends Plugin {
 	settings: QuickShareNotePluginSettings;
 	private compatibilityHandler: MarkdownCompatibilityHandler;
+	private isPublishing: boolean = false;
 
 	async onload() {
 		try {
@@ -548,6 +549,12 @@ export default class QuickShareNotePlugin extends Plugin {
 	 * Publishes the active note to GitHub gist with image uploads to Imgur
 	 */
 	async publishNoteToGist() {
+		// Prevent multiple simultaneous publishing operations
+		if (this.isPublishing) {
+			new Notice('Publishing already in progress. Please wait...');
+			return;
+		}
+
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) {
 			new Notice('No active file found');
@@ -559,6 +566,7 @@ export default class QuickShareNotePlugin extends Plugin {
 			return;
 		}
 
+		this.isPublishing = true;
 		let progressNotice = new Notice(`Preparing to publish: ${activeFile.name}...`, 0);
 		
 		try {
@@ -581,6 +589,8 @@ export default class QuickShareNotePlugin extends Plugin {
 		} catch (error) {
 			progressNotice.hide();
 			this.handlePublishError(error);
+		} finally {
+			this.isPublishing = false;
 		}
 	}
 
@@ -806,9 +816,18 @@ export default class QuickShareNotePlugin extends Plugin {
 		const imageRegex = /!\[\[(.*?)\]\]/g;
 		const activeFile = this.app.workspace.getActiveFile();
 		const notePath = activeFile ? activeFile.path.replace(/[^/]+$/, '') : '';
-		let match;
 		
-		while ((match = imageRegex.exec(content)) !== null) {
+		// Find all matches first to avoid regex state issues with global flag
+		const matches = Array.from(content.matchAll(imageRegex));
+		const totalImages = matches.length;
+		
+		for (let i = 0; i < matches.length; i++) {
+			const match = matches[i];
+			
+			if (progressCallback) {
+				progressCallback(i + 1, totalImages);
+			}
+			
 			try {
 				const attachFile = this.app.metadataCache.getFirstLinkpathDest(match[1], notePath);
 				if (attachFile == null) {
