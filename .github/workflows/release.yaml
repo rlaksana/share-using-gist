@@ -12,6 +12,13 @@ on:
       - 'package.json' 
       - 'main.ts'
       - 'versions.json'
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force create release even if version exists'
+        required: false
+        default: 'false'
+        type: boolean
 
 jobs:
   release:
@@ -65,8 +72,8 @@ jobs:
               }
             }
 
-      - name: Bump version if exists
-        if: ${{ steps.check_version.outputs.version_exists == 'true' }}
+      - name: Bump version if exists (and not forced)
+        if: ${{ steps.check_version.outputs.version_exists == 'true' && github.event.inputs.force_release != 'true' }}
         run: |
           version=$(jq -r '.version' manifest.json)
           IFS='.' read -ra parts <<< "$version"
@@ -87,6 +94,7 @@ jobs:
           echo -e "\e[32mRelease will be created in new workflow\e[0m"
 
       - name: Create GitHub Release
+        if: ${{ steps.check_version.outputs.version_exists == 'false' || github.event.inputs.force_release == 'true' }}
         id: create_release
         uses: actions/create-release@v1
         env:
@@ -122,6 +130,7 @@ jobs:
             Made with ❤️ for the Obsidian community
 
       - name: Upload Release Assets
+        if: ${{ steps.create_release.outcome == 'success' }}
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -132,6 +141,7 @@ jobs:
           asset_content_type: application/javascript
 
       - name: Upload manifest.json
+        if: ${{ steps.create_release.outcome == 'success' }}
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -142,6 +152,7 @@ jobs:
           asset_content_type: application/json
           
       - name: Upload versions.json
+        if: ${{ steps.create_release.outcome == 'success' }}
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
