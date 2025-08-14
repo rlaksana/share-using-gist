@@ -776,23 +776,35 @@ export default class QuickShareNotePlugin extends Plugin {
 			const fileContent = await this.app.vault.read(file);
 			const parsed = this.parseFrontmatter(fileContent);
 			
+			// Check if URL already exists and is the same - don't modify if unchanged
+			if (parsed.hasFrontmatter) {
+				const existingMatch = parsed.frontmatter.match(/gist-publish-url:\s*(.+)/);
+				if (existingMatch && existingMatch[1].trim() === url.trim()) {
+					// URL is the same, no need to update
+					return;
+				}
+			}
+			
 			let newContent: string;
 			
 			if (parsed.hasFrontmatter) {
-				// Update existing frontmatter
-				const frontmatterLines = parsed.frontmatter.split('\n').filter(line => line.trim());
-				const gistUrlIndex = frontmatterLines.findIndex(line => line.startsWith('gist-publish-url:'));
+				// Update existing frontmatter - parsed.frontmatter already includes ---
+				const lines = parsed.frontmatter.split('\n');
+				const contentLines = lines.slice(1, -2); // Remove first --- and last --- lines
+				
+				const gistUrlIndex = contentLines.findIndex(line => line.startsWith('gist-publish-url:'));
 				
 				if (gistUrlIndex >= 0) {
-					frontmatterLines[gistUrlIndex] = `gist-publish-url: ${url}`;
+					contentLines[gistUrlIndex] = `gist-publish-url: ${url}`;
 				} else {
-					frontmatterLines.push(`gist-publish-url: ${url}`);
+					contentLines.push(`gist-publish-url: ${url}`);
 				}
 				
-				const updatedFrontmatter = '---\n' + frontmatterLines.join('\n') + '\n---\n';
+				// Rebuild with proper Obsidian property format
+				const updatedFrontmatter = '---\n' + contentLines.filter(line => line.trim()).join('\n') + '\n---\n';
 				newContent = updatedFrontmatter + parsed.content;
 			} else {
-				// Add new frontmatter
+				// Add new frontmatter with Obsidian property format
 				newContent = `---\ngist-publish-url: ${url}\n---\n${fileContent}`;
 			}
 
