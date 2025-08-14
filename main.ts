@@ -724,10 +724,7 @@ export default class QuickShareNotePlugin extends Plugin {
 			return await requestUrl({
 				url: GITHUB_API_URL,
 				method: 'POST',
-				headers: {
-					Authorization: `token ${this.settings.githubToken}`,
-					'Content-Type': 'application/json',
-				},
+				headers: this.getAuthHeaders(),
 				body: JSON.stringify({
 					files: {
 						[activeFileName]: {
@@ -750,10 +747,7 @@ export default class QuickShareNotePlugin extends Plugin {
 			return await requestUrl({
 				url: `${GITHUB_API_URL}/${gistId}`,
 				method: 'PATCH',
-				headers: {
-					Authorization: `token ${this.settings.githubToken}`,
-					'Content-Type': 'application/json',
-				},
+				headers: this.getAuthHeaders(),
 				body: JSON.stringify({
 					files: {
 						[activeFileName]: {
@@ -897,6 +891,26 @@ export default class QuickShareNotePlugin extends Plugin {
 	}
 
 	/**
+	 * Gets appropriate authorization headers based on token type
+	 */
+	private getAuthHeaders(): Record<string, string> {
+		const token = this.settings.githubToken;
+		if (token.startsWith('github_pat_')) {
+			// Fine-grained personal access tokens
+			return {
+				'Authorization': `Bearer ${token}`,
+				'X-GitHub-Api-Version': '2022-11-28',
+				'Content-Type': 'application/json',
+			};
+		}
+		// Classic personal access tokens and legacy tokens
+		return {
+			'Authorization': `token ${token}`,
+			'Content-Type': 'application/json',
+		};
+	}
+
+	/**
 	 * Validates plugin settings before API operations
 	 */
 	private validateSettings(): boolean {
@@ -910,8 +924,9 @@ export default class QuickShareNotePlugin extends Plugin {
 			return false;
 		}
 		
-		// Basic GitHub token format validation
-		if (!this.settings.githubToken.match(/^gh[a-z]_[A-Za-z0-9_]+$/) && 
+		// Enhanced GitHub token format validation - supports all token types
+		if (!this.settings.githubToken.match(/^github_pat_[A-Za-z0-9_]+$/) && 
+			!this.settings.githubToken.match(/^gh[a-z]_[A-Za-z0-9_]+$/) && 
 			!this.settings.githubToken.match(/^[a-f0-9]{40}$/)) {
 			new Notice('GitHub token appears to be invalid. Please check your token format.');
 			return false;
@@ -1026,14 +1041,15 @@ class QuickShareNoteSettingTab extends PluginSettingTab {
 			.setName('GitHub token')
 			.setDesc('Enter your GitHub personal access token (requires gist scope)')
 			.addText(text => {
-				text.setPlaceholder('ghp_xxxxxxxxxxxxxxxxxxxx or classic 40-char token')
+				text.setPlaceholder('github_pat_xxx, ghp_xxx, or classic 40-char token')
 					.setValue(this.plugin.settings.githubToken)
 					.onChange(async (value) => {
 						this.plugin.settings.githubToken = value;
 						await this.plugin.saveSettings();
 						
-						// Validate token format
+						// Enhanced token format validation - supports all token types
 						const isValid = value.trim() === '' || 
+							value.match(/^github_pat_[A-Za-z0-9_]+$/) ||
 							value.match(/^gh[a-z]_[A-Za-z0-9_]+$/) || 
 							value.match(/^[a-f0-9]{40}$/);
 						
