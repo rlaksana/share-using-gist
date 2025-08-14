@@ -12,6 +12,16 @@ interface QuickShareNotePluginSettings {
 	handleMath: 'remove' | 'convert' | 'preserve';
 	handlePluginContent: 'remove' | 'convert';
 	showCompatibilityReport: boolean;
+	// Bidirectional sync settings
+	enableAutoSync: boolean;
+	debounceDelay: number;
+	enableAdaptiveDebounce: boolean;
+	enableManualPull: boolean;
+	confirmPullOverride: boolean;
+	syncNotifications: 'all' | 'errors' | 'none';
+	showRateLimitStatus: boolean;
+	maxQueuedSyncs: number;
+	emergencyDisableThreshold: number;
 }
 
 const DEFAULT_SETTINGS: QuickShareNotePluginSettings = {
@@ -25,7 +35,17 @@ const DEFAULT_SETTINGS: QuickShareNotePluginSettings = {
 	convertCallouts: true,
 	handleMath: 'convert',
 	handlePluginContent: 'convert',
-	showCompatibilityReport: true
+	showCompatibilityReport: true,
+	// Default sync settings
+	enableAutoSync: false,
+	debounceDelay: 1500,
+	enableAdaptiveDebounce: true,
+	enableManualPull: true,
+	confirmPullOverride: true,
+	syncNotifications: 'all',
+	showRateLimitStatus: true,
+	maxQueuedSyncs: 10,
+	emergencyDisableThreshold: 100
 };
 
 // API endpoints
@@ -68,6 +88,69 @@ interface CompatibilityReport {
 	conversionResults: ConversionResult;
 	compatibilityScore: number; // 0-100
 	recommendations: string[];
+}
+
+// Rate limit interfaces
+interface GitHubRateLimit {
+	limit: number;
+	remaining: number;
+	reset: number;
+	used: number;
+}
+
+// Adaptive debounce class
+class AdaptiveDebounce {
+	private baseDelay: number;
+	private currentDelay: number;
+	private rateLimit: GitHubRateLimit;
+
+	constructor(baseDelay: number = 1000) {
+		this.baseDelay = baseDelay;
+		this.currentDelay = baseDelay;
+		this.rateLimit = {
+			limit: 5000,
+			remaining: 5000,
+			reset: 0,
+			used: 0
+		};
+	}
+
+	updateRateLimit(headers: any) {
+		this.rateLimit = {
+			limit: parseInt(headers['x-ratelimit-limit'] || '5000'),
+			remaining: parseInt(headers['x-ratelimit-remaining'] || '5000'),
+			reset: parseInt(headers['x-ratelimit-reset'] || '0'),
+			used: parseInt(headers['x-ratelimit-used'] || '0')
+		};
+		
+		this.adjustDebounceDelay();
+	}
+
+	private adjustDebounceDelay() {
+		const { remaining, limit } = this.rateLimit;
+		const usagePercentage = (limit - remaining) / limit;
+		
+		// Adaptive logic
+		if (usagePercentage > 0.9) {        // >90% used
+			this.currentDelay = this.baseDelay * 8;  // 8 seconds
+		} else if (usagePercentage > 0.8) { // >80% used  
+			this.currentDelay = this.baseDelay * 4;  // 4 seconds
+		} else if (usagePercentage > 0.6) { // >60% used
+			this.currentDelay = this.baseDelay * 2;  // 2 seconds  
+		} else if (usagePercentage > 0.4) { // >40% used
+			this.currentDelay = this.baseDelay * 1.5; // 1.5 seconds
+		} else {                            // <40% used
+			this.currentDelay = this.baseDelay;      // 1 second
+		}
+	}
+
+	getDelay(): number {
+		return this.currentDelay;
+	}
+
+	getRateLimit(): GitHubRateLimit {
+		return { ...this.rateLimit };
+	}
 }
 
 // Markdown Compatibility Handler
@@ -521,11 +604,16 @@ export default class QuickShareNotePlugin extends Plugin {
 	settings: QuickShareNotePluginSettings;
 	private compatibilityHandler: MarkdownCompatibilityHandler;
 	private isPublishing: boolean = false;
+	// Sync functionality
+	private adaptiveDebounce: AdaptiveDebounce;
+	private debouncedSync: (file: TFile) => void;
+	private queuedSyncs: TFile[] = [];
 
 	async onload() {
 		try {
 			await this.loadSettings();
 			this.compatibilityHandler = new MarkdownCompatibilityHandler();
+			this.setupSyncFunctionality();
 			this.addSettingTab(new QuickShareNoteSettingTab(this.app, this));
 
 			this.addCommand({
@@ -538,6 +626,13 @@ export default class QuickShareNotePlugin extends Plugin {
 				id: 'analyze-markdown-compatibility',
 				name: 'Analyze Markdown compatibility',
 				callback: () => this.analyzeCurrentNoteCompatibility(),
+			});
+
+			// Add manual pull command
+			this.addCommand({
+				id: 'pull-from-gist',
+				name: 'Pull note from GitHub gist',
+				callback: () => this.pullCurrentNoteFromGist(),
 			});
 		} catch (error) {
 			console.error('Failed to load Quick Share Note plugin:', error);
@@ -1012,6 +1107,259 @@ export default class QuickShareNotePlugin extends Plugin {
 		};
 	}
 
+	// ===== SYNC FUNCTIONALITY =====
+
+	/**
+	 * Setup sync functionality including adaptive debounce and file watching
+	 */
+	private setupSyncFunctionality() {
+		// Initialize adaptive debounce
+		this.adaptiveDebounce = new AdaptiveDebounce(this.settings.debounceDelay);
+		
+		// Setup dynamic debounce function
+		this.setupDynamicDebounce();
+		
+		// Register vault modify event for auto-sync
+		this.registerEvent(
+			this.app.vault.on('modify', async (file) => {
+				// Ensure it's a TFile, not a folder
+				if (file instanceof TFile && await this.shouldAutoSync(file)) {
+					this.debouncedSync(file);
+				}
+			})
+		);
+	}
+
+	/**
+	 * Setup dynamic debounce that adapts delay based on settings
+	 */
+	private setupDynamicDebounce() {
+		let timeoutId: NodeJS.Timeout;
+		
+		this.debouncedSync = (file: TFile) => {
+			clearTimeout(timeoutId);
+			
+			// Get current adaptive delay or use settings
+			const delay = this.settings.enableAdaptiveDebounce ? 
+				this.adaptiveDebounce.getDelay() : 
+				this.settings.debounceDelay;
+			
+			timeoutId = setTimeout(() => {
+				this.autoSyncToGist(file);
+			}, delay);
+		};
+	}
+
+	/**
+	 * Check if file should be auto-synced
+	 */
+	private async shouldAutoSync(file: TFile): Promise<boolean> {
+		// Skip if auto-sync disabled
+		if (!this.settings.enableAutoSync) {
+			return false;
+		}
+
+		// Skip if currently publishing manually
+		if (this.isPublishing) {
+			return false;
+		}
+
+		// Check if file has gist-publish-url
+		return await this.hasGistUrl(file);
+	}
+
+	/**
+	 * Check if file has a gist URL in frontmatter
+	 */
+	private async hasGistUrl(file: TFile): Promise<boolean> {
+		try {
+			const content = await this.app.vault.read(file);
+			const parsed = this.parseFrontmatter(content);
+			return parsed.hasFrontmatter && /gist-publish-url:\s*https/.test(parsed.frontmatter);
+		} catch (error) {
+			return false;
+		}
+	}
+
+	/**
+	 * Auto-sync file to Gist (called after debounce delay)
+	 */
+	private async autoSyncToGist(file: TFile) {
+		if (this.settings.syncNotifications === 'all') {
+			new Notice(`Auto-syncing: ${file.name}`, 2000);
+		}
+
+		try {
+			const content = await this.app.vault.read(file);
+			const parsed = this.parseFrontmatter(content);
+			
+			// Extract gist ID from URL
+			const gistMatch = parsed.frontmatter.match(/gist-publish-url:\s*https:\/\/gist\.github\.com\/.*\/(.+)/);
+			if (!gistMatch) {
+				console.error('Auto-sync failed: No valid gist URL found');
+				return;
+			}
+
+			// Upload images and prepare content
+			const contentWithImages = await this.uploadImagesAndReplaceLinks(content);
+			const preparedContent = this.prepareContentForPublishing(contentWithImages, file.name);
+
+			// Update gist
+			const response = await this.updateGist(gistMatch[1], file.name, preparedContent);
+			
+			// Update rate limit from response headers
+			if (this.settings.enableAdaptiveDebounce) {
+				this.adaptiveDebounce.updateRateLimit(response.headers);
+			}
+
+			// Check rate limit and handle emergency disable
+			this.checkRateLimitEmergency();
+
+			if (this.settings.syncNotifications === 'all') {
+				new Notice(`✅ Auto-synced: ${file.name}`, 2000);
+			}
+
+		} catch (error) {
+			console.error('Auto-sync failed:', error);
+			if (this.settings.syncNotifications !== 'none') {
+				new Notice(`❌ Auto-sync failed: ${this.getErrorMessage(error)}`, 4000);
+			}
+		}
+	}
+
+	/**
+	 * Manual pull from Gist to Obsidian
+	 */
+	async pullCurrentNoteFromGist() {
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!activeFile) {
+			new Notice('No active file found');
+			return;
+		}
+
+		if (!this.settings.enableManualPull) {
+			new Notice('Manual pull is disabled in settings');
+			return;
+		}
+
+		if (!this.validateSettings()) {
+			return;
+		}
+
+		const pullNotice = new Notice('Pulling from Gist...', 0);
+
+		try {
+			const content = await this.app.vault.read(activeFile);
+			const parsed = this.parseFrontmatter(content);
+			
+			// Extract gist ID from URL
+			const gistMatch = parsed.frontmatter.match(/gist-publish-url:\s*https:\/\/gist\.github\.com\/.*\/(.+)/);
+			if (!gistMatch) {
+				pullNotice.hide();
+				new Notice('No gist URL found in this note');
+				return;
+			}
+
+			// Confirm override if setting enabled
+			if (this.settings.confirmPullOverride) {
+				// Simple confirmation - in real implementation, use a proper modal
+				const confirmed = window.confirm('This will override your current note content with the Gist content. Continue?');
+				if (!confirmed) {
+					pullNotice.hide();
+					return;
+				}
+			}
+
+			// Fetch from GitHub Gist API
+			const gistResponse = await requestUrl({
+				url: `${GITHUB_API_URL}/${gistMatch[1]}`,
+				method: 'GET',
+				headers: this.getAuthHeaders()
+			});
+
+			// Extract content from first file in gist
+			const files = gistResponse.json.files;
+			const firstFile = Object.values(files)[0] as any;
+			if (!firstFile?.content) {
+				throw new Error('No content found in Gist');
+			}
+
+			// Update file content (preserve frontmatter with updated timestamp)
+			const newContent = this.preserveFrontmatterForPull(parsed, firstFile.content);
+			await this.app.vault.modify(activeFile, newContent);
+
+			pullNotice.hide();
+			new Notice(`✅ Pulled from Gist: ${activeFile.name}`, 3000);
+
+		} catch (error) {
+			pullNotice.hide();
+			console.error('Pull from Gist failed:', error);
+			new Notice(`❌ Pull failed: ${this.getErrorMessage(error)}`, 4000);
+		}
+	}
+
+	/**
+	 * Preserve frontmatter when pulling from Gist
+	 */
+	private preserveFrontmatterForPull(parsed: FrontmatterData, gistContent: string): string {
+		if (!parsed.hasFrontmatter) {
+			return gistContent;
+		}
+
+		// Add last-pulled timestamp
+		const frontmatterLines = parsed.frontmatter.split('\n').slice(1, -2); // Remove --- delimiters
+		const lastPulledIndex = frontmatterLines.findIndex(line => line.startsWith('last-pulled:'));
+		
+		if (lastPulledIndex >= 0) {
+			frontmatterLines[lastPulledIndex] = `last-pulled: ${new Date().toISOString()}`;
+		} else {
+			frontmatterLines.push(`last-pulled: ${new Date().toISOString()}`);
+		}
+
+		return `---\n${frontmatterLines.filter(line => line.trim()).join('\n')}\n---\n${gistContent}`;
+	}
+
+	/**
+	 * Check rate limit and disable auto-sync if emergency threshold reached
+	 */
+	private checkRateLimitEmergency() {
+		if (!this.settings.enableAdaptiveDebounce) {
+			return;
+		}
+
+		const rateLimit = this.adaptiveDebounce.getRateLimit();
+		if (rateLimit.remaining <= this.settings.emergencyDisableThreshold) {
+			this.settings.enableAutoSync = false;
+			this.saveSettings();
+			
+			new Notice(`⚠️ Rate limit low (${rateLimit.remaining}/${rateLimit.limit}). Auto-sync disabled.`, 5000);
+			
+			// Schedule re-enable after rate limit reset
+			const resetTime = rateLimit.reset * 1000;
+			const delay = resetTime - Date.now();
+			
+			if (delay > 0 && delay < 3600000) { // Within 1 hour
+				setTimeout(() => {
+					this.settings.enableAutoSync = true;
+					this.saveSettings();
+					new Notice('Rate limit reset. Auto-sync re-enabled.', 3000);
+				}, delay);
+			}
+		}
+	}
+
+	/**
+	 * Get rate limit display string for UI
+	 */
+	getRateLimitDisplay(): string {
+		if (!this.adaptiveDebounce) {
+			return 'Rate limit: Unknown';
+		}
+		
+		const rateLimit = this.adaptiveDebounce.getRateLimit();
+		return `${rateLimit.remaining}/${rateLimit.limit} remaining`;
+	}
+
 	/**
 	 * Extracts meaningful error message from error objects
 	 */
@@ -1193,5 +1541,143 @@ class QuickShareNoteSettingTab extends PluginSettingTab {
 				.onClick(() => {
 					this.plugin.analyzeCurrentNoteCompatibility();
 				}));
+
+		// Bidirectional Sync Settings
+		containerEl.createEl('h3', { text: 'Bidirectional Sync Settings' });
+		containerEl.createEl('p', { 
+			text: 'Configure automatic syncing between Obsidian and GitHub Gist',
+			cls: 'setting-item-description'
+		});
+
+		new Setting(containerEl)
+			.setName('Enable auto-sync to Gist')
+			.setDesc('Automatically sync note changes to GitHub Gist after editing stops')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.enableAutoSync)
+				.onChange(async (value) => {
+					this.plugin.settings.enableAutoSync = value;
+					await this.plugin.saveSettings();
+					this.refreshSyncSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Auto-sync delay')
+			.setDesc('How long to wait after editing stops before syncing (prevents too frequent API calls)')
+			.addDropdown(dropdown => dropdown
+				.addOption('500', '0.5 seconds (Fast)')
+				.addOption('1000', '1 second (Balanced)')
+				.addOption('1500', '1.5 seconds (Recommended)')
+				.addOption('2000', '2 seconds (Conservative)')
+				.addOption('3000', '3 seconds (Very Safe)')
+				.setValue(this.plugin.settings.debounceDelay.toString())
+				.onChange(async (value) => {
+					this.plugin.settings.debounceDelay = parseInt(value);
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Adaptive sync delay')
+			.setDesc('Automatically adjust sync delay based on GitHub API rate limit usage')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.enableAdaptiveDebounce)
+				.onChange(async (value) => {
+					this.plugin.settings.enableAdaptiveDebounce = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Enable manual pull from Gist')
+			.setDesc('Add command to manually update Obsidian note from GitHub Gist')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.enableManualPull)
+				.onChange(async (value) => {
+					this.plugin.settings.enableManualPull = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Confirm before pull override')
+			.setDesc('Show confirmation dialog before overriding Obsidian content with Gist content')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.confirmPullOverride)
+				.onChange(async (value) => {
+					this.plugin.settings.confirmPullOverride = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Show sync notifications')
+			.setDesc('Display notifications for successful syncs and errors')
+			.addDropdown(dropdown => dropdown
+				.addOption('all', 'All notifications')
+				.addOption('errors', 'Errors only')
+				.addOption('none', 'No notifications')
+				.setValue(this.plugin.settings.syncNotifications)
+				.onChange(async (value) => {
+					this.plugin.settings.syncNotifications = value as 'all' | 'errors' | 'none';
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('GitHub API Rate Limit Status')
+			.setDesc('Current GitHub API usage (updates after each sync)')
+			.addText(text => {
+				text.setValue(this.plugin.getRateLimitDisplay())
+					.setDisabled(true);
+				text.inputEl.style.backgroundColor = '#f0f0f0';
+				text.inputEl.style.color = '#666';
+				return text;
+			});
+
+		new Setting(containerEl)
+			.setName('Pull current note from Gist')
+			.setDesc('Manually update the current note with content from GitHub Gist')
+			.addButton(button => button
+				.setButtonText('Pull from Gist')
+				.setCta()
+				.onClick(async () => {
+					await this.plugin.pullCurrentNoteFromGist();
+				}));
+
+		new Setting(containerEl)
+			.setName('Reset sync settings')
+			.setDesc('Reset all bidirectional sync settings to default values')
+			.addButton(button => button
+				.setButtonText('Reset to Defaults')
+				.setWarning()
+				.onClick(async () => {
+					this.resetSyncSettings();
+				}));
+	}
+
+	/**
+	 * Refresh sync-related settings visibility and state
+	 */
+	private refreshSyncSettings() {
+		// This could be implemented to show/hide certain settings
+		// For now, just re-display to update rate limit
+		this.display();
+	}
+
+	/**
+	 * Reset sync settings to defaults
+	 */
+	private async resetSyncSettings() {
+		const confirmed = window.confirm('Reset all sync settings to default values?');
+		if (!confirmed) return;
+
+		this.plugin.settings.enableAutoSync = false;
+		this.plugin.settings.debounceDelay = 1500;
+		this.plugin.settings.enableAdaptiveDebounce = true;
+		this.plugin.settings.enableManualPull = true;
+		this.plugin.settings.confirmPullOverride = true;
+		this.plugin.settings.syncNotifications = 'all';
+		this.plugin.settings.showRateLimitStatus = true;
+		this.plugin.settings.maxQueuedSyncs = 10;
+		this.plugin.settings.emergencyDisableThreshold = 100;
+
+		await this.plugin.saveSettings();
+		this.display(); // Refresh UI
+		new Notice('Sync settings reset to defaults');
 	}
 }
