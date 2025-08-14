@@ -1039,7 +1039,7 @@ class QuickShareNoteSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('GitHub token')
-			.setDesc('Enter your GitHub personal access token (requires gist scope)')
+			.setDesc('Enter your GitHub personal access token with gist scope (supports all token formats)')
 			.addText(text => {
 				text.setPlaceholder('github_pat_xxx, ghp_xxx, or classic 40-char token')
 					.setValue(this.plugin.settings.githubToken)
