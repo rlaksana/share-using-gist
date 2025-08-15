@@ -1,12 +1,13 @@
 {
   "name": "share-using-gist",
-  "version": "2.0.5",
+  "version": "2.0.6",
   "description": "Enhanced Obsidian plugin for sharing notes to GitHub Gist with multi-variant Markdown compatibility, intelligent content conversion, and advanced image handling",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
     "version": "node version-bump.mjs && git add manifest.json versions.json",
+    "auto-version": "node auto-version.mjs",
     "typecheck": "tsc -noEmit -skipLibCheck",
     "validate": "jq empty manifest.json && jq empty package.json && jq empty versions.json"
   },
