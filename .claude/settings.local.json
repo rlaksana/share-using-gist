@@ -1,18 +1,6 @@
 {
   "permissions": {
-    "allow": [
-      "Bash(npm run build:*)",
-      "Bash(ls:*)",
-      "Bash(npm install)",
-      "Bash(npm run dev:*)",
-      "WebFetch(domain:gist.github.com)",
-      "Bash(chmod:*)",
-      "Bash(npm run validate:*)",
-      "Bash(git add:*)",
-      "Bash(git push:*)",
-      "Bash(git commit:*)",
-      "Bash(npm install:*)"
-    ],
+    "allow": [],
     "deny": []
   }
 }

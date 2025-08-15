@@ -568,6 +568,30 @@ class MarkdownCompatibilityHandler {
 			changedElements: []
 		};
 
+		// FIRST: Fix improperly tagged Mermaid diagrams by adding 'mermaid' identifier
+		// This enables GitHub native rendering for diagrams that were missing the language tag
+		const improperMermaidRegex = /```\s*\n((?:flowchart|graph)[\s\S]*?)\n```/g;
+		let improperMatch;
+		let mermaidFixCount = 0;
+		
+		while ((improperMatch = improperMermaidRegex.exec(result.convertedContent)) !== null) {
+			const originalText = improperMatch[0];
+			const diagramContent = improperMatch[1];
+			const fixedText = `\`\`\`mermaid\n${diagramContent}\n\`\`\``;
+			
+			result.convertedContent = result.convertedContent.replace(originalText, fixedText);
+			result.changedElements.push({
+				original: originalText,
+				converted: fixedText,
+				type: 'mermaid-fix'
+			});
+			mermaidFixCount++;
+		}
+		
+		if (mermaidFixCount > 0) {
+			result.warnings.push(`Fixed ${mermaidFixCount} improperly tagged Mermaid diagrams for GitHub native rendering`);
+		}
+
 		// Handle Mermaid diagrams - ONLY if not using GitHub Native mode
 		// GitHub Gist has native Mermaid support since February 2022
 		if (options?.compatibilityMode !== 'github-native') {
