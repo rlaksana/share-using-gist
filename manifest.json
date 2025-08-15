@@ -1,7 +1,7 @@
 {
   "id": "share-using-gist",
   "name": "Share Using Gist",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "minAppVersion": "0.15.0",
   "description": "Enhanced plugin for sharing Obsidian notes to GitHub Gist with multi-variant Markdown compatibility, intelligent content conversion, callouts support, and advanced image handling.",
   "author": "Enhanced by AI Assistant",
