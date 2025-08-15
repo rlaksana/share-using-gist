@@ -5,12 +5,16 @@ interface QuickShareNotePluginSettings {
 	imgurClientId: string;
 	showFrontmatter: boolean;
 	// Markdown compatibility settings
-	compatibilityMode: 'strict' | 'permissive';
+	compatibilityMode: 'github-native' | 'strict' | 'permissive';
 	preserveWikilinks: boolean;
 	convertTags: boolean;
 	convertCallouts: boolean;
 	handleMath: 'remove' | 'convert' | 'preserve';
 	handlePluginContent: 'remove' | 'convert';
+	// New GitHub-aware settings
+	tagConversionFormat: 'inline-code' | 'bold-labels' | 'plain-text';
+	commentConversionFormat: 'html-comments' | 'italic-text';
+	dataviewConversionFormat: 'descriptive-blocks' | 'simple-blocks';
 	showCompatibilityReport: boolean;
 	// Bidirectional sync settings
 	enableAutoSync: boolean;
@@ -28,13 +32,17 @@ const DEFAULT_SETTINGS: QuickShareNotePluginSettings = {
 	githubToken: '',
 	imgurClientId: '',
 	showFrontmatter: true,
-	// Default compatibility settings - permissive mode
-	compatibilityMode: 'permissive',
+	// Default to GitHub Native mode for best experience
+	compatibilityMode: 'github-native',
 	preserveWikilinks: false,
 	convertTags: true,
-	convertCallouts: true,
-	handleMath: 'convert',
+	convertCallouts: false, // Let GitHub handle callouts natively
+	handleMath: 'preserve', // Let GitHub handle math natively
 	handlePluginContent: 'convert',
+	// New conversion format defaults
+	tagConversionFormat: 'inline-code',
+	commentConversionFormat: 'html-comments',
+	dataviewConversionFormat: 'descriptive-blocks',
 	showCompatibilityReport: true,
 	// Default sync settings
 	enableAutoSync: false,
@@ -75,12 +83,16 @@ interface MarkdownVariant {
 }
 
 interface ConversionOptions {
-	compatibilityMode: 'strict' | 'permissive';
+	compatibilityMode: 'github-native' | 'strict' | 'permissive';
 	preserveWikilinks: boolean;
 	convertTags: boolean;
 	convertCallouts: boolean;
 	handleMath: 'remove' | 'convert' | 'preserve';
 	handlePluginContent: 'remove' | 'convert';
+	// New GitHub-aware settings
+	tagConversionFormat?: 'inline-code' | 'bold-labels' | 'plain-text';
+	commentConversionFormat?: 'html-comments' | 'italic-text';
+	dataviewConversionFormat?: 'descriptive-blocks' | 'simple-blocks';
 }
 
 interface CompatibilityReport {
@@ -289,21 +301,36 @@ class MarkdownCompatibilityHandler {
 		};
 
 		if (!options?.preserveWikilinks) {
-			// Convert [[Page]] to [Page] or remove
-			const wikilinkRegex = /\[\[(?!\!)([^\]|]+)\]\]/g;
+			// Enhanced wikilink conversion that preserves linking intent
+			const wikilinkRegex = /\[\[(?!\!)([^\]|]+)(?:\|([^\]]+))?\]\]/g;
 			let match;
 			
 			while ((match = wikilinkRegex.exec(content)) !== null) {
 				const originalText = match[0];
-				const linkText = match[1];
+				const linkTarget = match[1];
+				const displayText = match[2] || linkTarget; // Use alias if provided
 				
 				if (options?.compatibilityMode === 'strict') {
-					// Remove wikilinks entirely in strict mode
-					result.convertedContent = result.convertedContent.replace(originalText, linkText);
-					result.removedElements.push(`Wikilink: ${originalText}`);
+					// Convert to plain text in strict mode but preserve display text
+					result.convertedContent = result.convertedContent.replace(originalText, displayText);
+					result.changedElements.push({
+						original: originalText,
+						converted: displayText,
+						type: 'wikilink'
+					});
+				} else if (options?.compatibilityMode === 'github-native') {
+					// Convert to proper markdown link format for better compatibility
+					const fileName = linkTarget.replace(/[\s\/]/g, '_'); // Sanitize filename
+					const convertedText = `[${displayText}](${fileName}.md)`;
+					result.convertedContent = result.convertedContent.replace(originalText, convertedText);
+					result.changedElements.push({
+						original: originalText,
+						converted: convertedText,
+						type: 'wikilink'
+					});
 				} else {
-					// Convert to plain text link in permissive mode
-					const convertedText = `**${linkText}**`;
+					// Permissive mode: Convert to bold text (legacy behavior)
+					const convertedText = `**${displayText}**`;
 					result.convertedContent = result.convertedContent.replace(originalText, convertedText);
 					result.changedElements.push({
 						original: originalText,
@@ -314,7 +341,11 @@ class MarkdownCompatibilityHandler {
 			}
 			
 			if (result.changedElements.length > 0 || result.removedElements.length > 0) {
-				result.warnings.push(`Converted ${result.changedElements.length + result.removedElements.length} wikilinks for Gist compatibility`);
+				if (options?.compatibilityMode === 'github-native') {
+					result.warnings.push(`Converted ${result.changedElements.length} wikilinks to standard markdown links`);
+				} else {
+					result.warnings.push(`Converted ${result.changedElements.length} wikilinks for compatibility`);
+				}
 			}
 		}
 
@@ -335,7 +366,13 @@ class MarkdownCompatibilityHandler {
 		};
 
 		if (options?.convertTags) {
-			// Convert #tag to **Tag:** tag format, but avoid markdown headers
+			// Skip processing in GitHub Native mode - tags work fine in Gist
+			if (options?.compatibilityMode === 'github-native') {
+				result.warnings.push('Tags preserved in original format for GitHub Gist compatibility');
+				return result;
+			}
+
+			// Convert #tag using configurable format, but avoid markdown headers
 			const tagRegex = /(?:^|\s)(#[\w\-\/]+)(?=\s|$|[^\w\-\/])/gm;
 			let match;
 			
@@ -357,8 +394,23 @@ class MarkdownCompatibilityHandler {
 					result.convertedContent = result.convertedContent.replace(originalText, '');
 					result.removedElements.push(`Tag: ${originalText}`);
 				} else {
-					// Convert to readable format
-					const convertedText = `\`${tagName}\``;
+					// Convert based on format preference
+					let convertedText: string;
+					const format = options?.tagConversionFormat || 'inline-code';
+					
+					switch (format) {
+						case 'bold-labels':
+							convertedText = `**Tag:** ${tagName}`;
+							break;
+						case 'plain-text':
+							convertedText = tagName;
+							break;
+						case 'inline-code':
+						default:
+							convertedText = `\`${tagName}\``;
+							break;
+					}
+					
 					result.convertedContent = result.convertedContent.replace(originalText, convertedText);
 					result.changedElements.push({
 						original: originalText,
@@ -369,7 +421,7 @@ class MarkdownCompatibilityHandler {
 			}
 			
 			if (result.changedElements.length > 0 || result.removedElements.length > 0) {
-				result.warnings.push(`Processed ${result.changedElements.length + result.removedElements.length} tags for Gist compatibility`);
+				result.warnings.push(`Processed ${result.changedElements.length + result.removedElements.length} tags using ${options?.tagConversionFormat || 'inline-code'} format`);
 			}
 		}
 
@@ -497,7 +549,12 @@ class MarkdownCompatibilityHandler {
 		
 		const totalMathElements = result.changedElements.length + result.removedElements.length;
 		if (totalMathElements > 0) {
-			result.warnings.push(`Processed ${totalMathElements} mathematical expressions - they may not render correctly in GitHub Gist`);
+			// Update warning message since GitHub Gist has native math support since 2022
+			if (options?.compatibilityMode === 'github-native') {
+				result.warnings.push(`Mathematical expressions preserved for GitHub native rendering`);
+			} else {
+				result.warnings.push(`Processed ${totalMathElements} mathematical expressions - they may not render correctly in older platforms`);
+			}
 		}
 
 		return result;
@@ -511,41 +568,57 @@ class MarkdownCompatibilityHandler {
 			changedElements: []
 		};
 
-		// Handle Mermaid diagrams
-		const mermaidRegex = /```mermaid\n([\s\S]*?)\n```/g;
-		let match;
-		
-		while ((match = mermaidRegex.exec(content)) !== null) {
-			const originalText = match[0];
-			const diagramContent = match[1];
+		// Handle Mermaid diagrams - ONLY if not using GitHub Native mode
+		// GitHub Gist has native Mermaid support since February 2022
+		if (options?.compatibilityMode !== 'github-native') {
+			const mermaidRegex = /```mermaid\n([\s\S]*?)\n```/g;
+			let match;
 			
-			if (options?.handlePluginContent === 'remove') {
-				result.convertedContent = result.convertedContent.replace(originalText, '');
-				result.removedElements.push('Mermaid diagram');
-			} else {
-				// Convert to labeled code block
-				const convertedText = `**📊 Mermaid Diagram:**\n\`\`\`\n${diagramContent}\n\`\`\``;
-				result.convertedContent = result.convertedContent.replace(originalText, convertedText);
-				result.changedElements.push({
-					original: originalText,
-					converted: convertedText,
-					type: 'mermaid'
-				});
+			while ((match = mermaidRegex.exec(content)) !== null) {
+				const originalText = match[0];
+				const diagramContent = match[1];
+				
+				if (options?.handlePluginContent === 'remove') {
+					result.convertedContent = result.convertedContent.replace(originalText, '');
+					result.removedElements.push('Mermaid diagram');
+				} else {
+					// Convert to labeled code block
+					const convertedText = `**📊 Mermaid Diagram:**\n\`\`\`\n${diagramContent}\n\`\`\``;
+					result.convertedContent = result.convertedContent.replace(originalText, convertedText);
+					result.changedElements.push({
+						original: originalText,
+						converted: convertedText,
+						type: 'mermaid'
+					});
+				}
 			}
+		} else {
+			// GitHub Native mode: Leave Mermaid untouched for native rendering
+			result.warnings.push('Mermaid diagrams preserved for GitHub native rendering');
 		}
 		
 		// Handle Dataview queries
 		const dataviewRegex = /```dataview\n([\s\S]*?)\n```/g;
+		let dataviewMatch;
 		
-		while ((match = dataviewRegex.exec(result.convertedContent)) !== null) {
-			const originalText = match[0];
-			const queryContent = match[1];
+		while ((dataviewMatch = dataviewRegex.exec(result.convertedContent)) !== null) {
+			const originalText = dataviewMatch[0];
+			const queryContent = dataviewMatch[1];
 			
 			if (options?.handlePluginContent === 'remove') {
 				result.convertedContent = result.convertedContent.replace(originalText, '');
 				result.removedElements.push('Dataview query');
 			} else {
-				const convertedText = `**📈 Dataview Query:**\n\`\`\`sql\n${queryContent}\n\`\`\``;
+				// Use configurable format for dataview conversion
+				const format = options?.dataviewConversionFormat || 'descriptive-blocks';
+				let convertedText: string;
+				
+				if (format === 'descriptive-blocks') {
+					convertedText = `**📈 Dataview Query:**\n\n*This was a dynamic query that would have displayed data from your vault:*\n\n\`\`\`sql\n${queryContent}\n\`\`\``;
+				} else {
+					convertedText = `**Dataview:**\n\`\`\`sql\n${queryContent}\n\`\`\``;
+				}
+				
 				result.convertedContent = result.convertedContent.replace(originalText, convertedText);
 				result.changedElements.push({
 					original: originalText,
@@ -557,23 +630,54 @@ class MarkdownCompatibilityHandler {
 		
 		// Handle comments %%...%%
 		const commentRegex = /%%[\s\S]*?%%/g;
+		let commentMatch;
 		
-		while ((match = commentRegex.exec(result.convertedContent)) !== null) {
-			const originalText = match[0];
+		while ((commentMatch = commentRegex.exec(result.convertedContent)) !== null) {
+			const originalText = commentMatch[0];
+			const commentContent = originalText.slice(2, -2).trim(); // Remove %% delimiters
 			
-			// Always remove comments as they're not meant to be published
-			result.convertedContent = result.convertedContent.replace(originalText, '');
-			result.removedElements.push('Obsidian comment');
+			if (options?.compatibilityMode === 'github-native') {
+				// Convert to HTML comments or italic text for GitHub Gist
+				const format = options?.commentConversionFormat || 'html-comments';
+				let convertedText: string;
+				
+				if (format === 'html-comments') {
+					convertedText = `<!-- ${commentContent} -->`;
+				} else {
+					convertedText = `*[${commentContent}]*`;
+				}
+				
+				result.convertedContent = result.convertedContent.replace(originalText, convertedText);
+				result.changedElements.push({
+					original: originalText,
+					converted: convertedText,
+					type: 'comment'
+				});
+			} else if (options?.compatibilityMode === 'strict') {
+				// Remove comments in strict mode
+				result.convertedContent = result.convertedContent.replace(originalText, '');
+				result.removedElements.push('Obsidian comment');
+			} else {
+				// Permissive mode: Convert to readable format
+				const convertedText = `*[Note: ${commentContent}]*`;
+				result.convertedContent = result.convertedContent.replace(originalText, convertedText);
+				result.changedElements.push({
+					original: originalText,
+					converted: convertedText,
+					type: 'comment'
+				});
+			}
 		}
 		
 		// Handle Admonition plugin syntax
 		const admonitionRegex = /```ad-([\w\-]+)\n(?:title: (.*)\n)?([\s\S]*?)\n```/g;
+		let admonitionMatch;
 		
-		while ((match = admonitionRegex.exec(result.convertedContent)) !== null) {
-			const originalText = match[0];
-			const adType = match[1];
-			const title = match[2] || adType;
-			const adContent = match[3];
+		while ((admonitionMatch = admonitionRegex.exec(result.convertedContent)) !== null) {
+			const originalText = admonitionMatch[0];
+			const adType = admonitionMatch[1];
+			const title = admonitionMatch[2] || adType;
+			const adContent = admonitionMatch[3];
 			
 			if (options?.handlePluginContent === 'remove') {
 				result.convertedContent = result.convertedContent.replace(originalText, adContent);
@@ -1456,19 +1560,20 @@ class QuickShareNoteSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Compatibility mode')
-			.setDesc('Strict mode removes incompatible elements, Permissive mode converts them when possible')
+			.setDesc('GitHub Native preserves GitHub Gist supported features, Permissive converts when possible, Strict removes all incompatible elements')
 			.addDropdown(dropdown => dropdown
-				.addOption('strict', 'Strict (Remove incompatible elements)')
+				.addOption('github-native', 'GitHub Native (Preserve Gist features)')
 				.addOption('permissive', 'Permissive (Convert when possible)')
+				.addOption('strict', 'Strict (Remove incompatible elements)')
 				.setValue(this.plugin.settings.compatibilityMode)
-				.onChange(async (value: 'strict' | 'permissive') => {
+				.onChange(async (value: 'github-native' | 'permissive' | 'strict') => {
 					this.plugin.settings.compatibilityMode = value;
 					await this.plugin.saveSettings();
 				}));
 
 		new Setting(containerEl)
 			.setName('Convert wikilinks')
-			.setDesc('Convert [[wikilinks]] to bold text format')
+			.setDesc('Convert [[wikilinks]] to standard markdown links in GitHub Native mode')
 			.addToggle(toggle => toggle
 				.setValue(!this.plugin.settings.preserveWikilinks)
 				.onChange(async (value) => {
@@ -1478,7 +1583,7 @@ class QuickShareNoteSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Convert tags')
-			.setDesc('Convert #tags to inline code format')
+			.setDesc('Convert #tags to preserve data (GitHub Native mode ignores this setting)')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.convertTags)
 				.onChange(async (value) => {
@@ -1487,8 +1592,21 @@ class QuickShareNoteSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
+			.setName('Tag conversion format')
+			.setDesc('Choose how #tags are converted when not in GitHub Native mode')
+			.addDropdown(dropdown => dropdown
+				.addOption('inline-code', 'Inline code: `tag`')
+				.addOption('bold-labels', 'Bold labels: **Tag:** tag')
+				.addOption('plain-text', 'Plain text: tag')
+				.setValue(this.plugin.settings.tagConversionFormat)
+				.onChange(async (value: 'inline-code' | 'bold-labels' | 'plain-text') => {
+					this.plugin.settings.tagConversionFormat = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
 			.setName('Convert callouts')
-			.setDesc('Convert > [!note] callouts to blockquotes with emoji indicators')
+			.setDesc('Convert > [!note] callouts to blockquotes - GitHub Gist has native alert support since Nov 2023')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.convertCallouts)
 				.onChange(async (value) => {
@@ -1498,10 +1616,10 @@ class QuickShareNoteSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Handle math expressions')
-			.setDesc('How to handle LaTeX math expressions ($$ or $)')
+			.setDesc('How to handle LaTeX math expressions ($$ or $) - GitHub Gist has native support')
 			.addDropdown(dropdown => dropdown
 				.addOption('convert', 'Convert to code blocks')
-				.addOption('preserve', 'Keep as-is (may not render)')
+				.addOption('preserve', 'Keep as-is (GitHub native rendering)')
 				.addOption('remove', 'Remove math expressions')
 				.setValue(this.plugin.settings.handleMath)
 				.onChange(async (value: 'remove' | 'convert' | 'preserve') => {
@@ -1511,13 +1629,37 @@ class QuickShareNoteSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Handle plugin content')
-			.setDesc('How to handle Mermaid, Dataview, and other plugin-specific content')
+			.setDesc('How to handle Mermaid, Dataview, and other plugin-specific content (GitHub Native mode preserves Mermaid)')
 			.addDropdown(dropdown => dropdown
 				.addOption('convert', 'Convert to labeled code blocks')
 				.addOption('remove', 'Remove plugin content')
 				.setValue(this.plugin.settings.handlePluginContent)
 				.onChange(async (value: 'remove' | 'convert') => {
 					this.plugin.settings.handlePluginContent = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Comment conversion format')
+			.setDesc('Choose how %%comments%% are converted (GitHub Native mode preserves as HTML comments)')
+			.addDropdown(dropdown => dropdown
+				.addOption('html-comments', 'HTML comments: <!-- comment -->')
+				.addOption('italic-text', 'Italic text: *[comment]*')
+				.setValue(this.plugin.settings.commentConversionFormat)
+				.onChange(async (value: 'html-comments' | 'italic-text') => {
+					this.plugin.settings.commentConversionFormat = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Dataview conversion format')
+			.setDesc('Choose how Dataview queries are converted when not removed')
+			.addDropdown(dropdown => dropdown
+				.addOption('descriptive-blocks', 'Descriptive blocks with explanation')
+				.addOption('simple-blocks', 'Simple labeled code blocks')
+				.setValue(this.plugin.settings.dataviewConversionFormat)
+				.onChange(async (value: 'descriptive-blocks' | 'simple-blocks') => {
+					this.plugin.settings.dataviewConversionFormat = value;
 					await this.plugin.saveSettings();
 				}));
 
