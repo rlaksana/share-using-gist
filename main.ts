@@ -935,7 +935,9 @@ export default class QuickShareNotePlugin extends Plugin {
 	private async finalizePublishing(file: TFile, gistUrl: string, progressNotice: Notice): Promise<void> {
 		progressNotice.setMessage(`Finalizing: ${file.name}...`);
 		
-		this.copyLinkToClipboard(gistUrl);
+		// Get note title (without .md extension)
+		const noteTitle = file.basename;
+		this.copyLinkToClipboard(gistUrl, noteTitle);
 		await this.updateFrontmatter(file, gistUrl);
 	}
 
@@ -1103,9 +1105,14 @@ export default class QuickShareNotePlugin extends Plugin {
 	/**
 	 * Copies the gist URL to clipboard
 	 */
-	copyLinkToClipboard(link: string) {
-		navigator.clipboard.writeText(link).then(() => {
-			new Notice('Gist URL copied to clipboard');
+	copyLinkToClipboard(link: string, noteTitle?: string) {
+		const copyText = noteTitle ? `${noteTitle}\n${link}` : link;
+		
+		navigator.clipboard.writeText(copyText).then(() => {
+			const message = noteTitle 
+				? 'Note title and Gist URL copied to clipboard'
+				: 'Gist URL copied to clipboard';
+			new Notice(message);
 		}, (err) => {
 			console.error('Failed to copy to clipboard:', err);
 			new Notice('Failed to copy gist URL to clipboard');
