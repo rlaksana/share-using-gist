@@ -135,4 +135,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Made with ❤️ for the Obsidian community**
 
-[⭐ Star on GitHub](https://github.com/your-username/share-using-gist) | [🐛 Report Bug](https://github.com/your-username/share-using-gist/issues) | [💡 Feature Request](https://github.com/your-username/share-using-gist/issues)
+[⭐ Star on GitHub](https://github.com/your-username/share-using-gist) | [🐛 Report Bug](https://github.com/your-username/share-using-gist/issues) | [💡 Feature Request](https://github.com/your-username/share-using-gist/issues)test change
